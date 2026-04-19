@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>부산 주요구 실시간 날씨</title>
+    <style>
+        :root {
+            --bg-color: #eef2f7;
+            --card-bg: #ffffff;
+            --primary: #3a7bd5;
+            --accent: #00d2ff;
+        }
+
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .weather-card {
+            background: var(--card-bg);
+            padding: 2.5rem;
+            border-radius: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            width: 350px;
+            text-align: center;
+        }
+
+        .selector-container {
+            margin-bottom: 1.5rem;
+        }
+
+        select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 12px;
+            border: 2px solid #eee;
+            font-size: 1rem;
+            outline: none;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+
+        select:focus { border-color: var(--primary); }
+
+        .time-label {
+            font-size: 0.85rem;
+            color: #999;
+            margin-bottom: 1rem;
+        }
+
+        .temp-display {
+            font-size: 4rem;
+            font-weight: 900;
+            color: #333;
+            margin: 0.5rem 0;
+            letter-spacing: -2px;
+        }
+
+        .weather-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 2rem;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 20px;
+        }
+
+        .grid-item { text-align: center; }
+        .grid-label { font-size: 0.75rem; color: #777; display: block; }
+        .grid-value { font-weight: 700; font-size: 1.1rem; color: #444; }
+
+        .loading-overlay {
+            display: none;
+            color: var(--primary);
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .loading .loading-overlay { display: block; }
+    </style>
+</head>
+<body>
+
+<div class="weather-card" id="widget">
+    <div class="selector-container">
+        <select id="region-select" onchange="fetchWeather()">
+            <option value="98,76">📍 부산 동래구</option>
+            <option value="98,75">📍 부산 연제구</option>
+            <option value="99,75">📍 부산 해운대구</option>
+            <option value="97,74">📍 부산진구</option>
+            <option value="96,74">📍 부산 사상구</option>
+            <option value="96,69">📍 부산 영도구</option>
+            <option value="97,74">📍 부산 남구</option>
+            <option value="100,77">📍 부산 기장군</option>
+            <option value="94,74">📍 부산 강서구</option>
+        </select>
+    </div>
+
+    <div class="time-label" id="base-time">데이터를 불러오는 중...</div>
+    <div class="temp-display" id="temp-val">--°</div>
+    
+    <div class="weather-grid">
+        <div class="grid-item">
+            <span class="grid-label">습도</span>
+            <span class="grid-value" id="humi-val">--%</span>
+        </div>
+        <div class="grid-item">
+            <span class="grid-label">강수량</span>
+            <span class="grid-value" id="rain-val">--mm</span>
+        </div>
+    </div>
+
+    <div class="loading-overlay">업데이트 중...</div>
+</div>
+
+<script>
+    async function fetchWeather() {
+        const widget = document.getElementById('widget');
+        const regionSelect = document.getElementById('region-select');
+        const [nx, ny] = regionSelect.value.split(',');
+        
+        widget.classList.add('loading');
+
+        // 1. 시간 설정 (기상청 API 안정성을 위해 40분 주기 계산)
+        const now = new Date();
+        let year = now.getFullYear();
+        let month = String(now.getMonth() + 1).padStart(2, '0');
+        let day = String(now.getDate()).padStart(2, '0');
+        let hours = now.getHours();
+        let minutes = now.getMinutes();
+
+        if (minutes < 40) {
+            hours -= 1;
+            if (hours < 0) {
+                const yesterday = new Date(now.setDate(now.getDate() - 1));
+                year = yesterday.getFullYear();
+                month = String(yesterday.getMonth() + 1).padStart(2, '0');
+                day = String(yesterday.getDate()).padStart(2, '0');
+                hours = 23;
+            }
+        }
+
+        const baseDate = `${year}${month}${day}`;
+        const baseTime = String(hours).padStart(2, '0') + "00";
+        const serviceKey = "7b5b9b9176173676126714016701a00995bfb1916e2e2827d4cac222db7e6f66";
+        
+        const url = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst?serviceKey=${serviceKey}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${baseDate}&base_time=${baseTime}&nx=${nx}&ny=${ny}`;
+
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (data.response && data.response.header.resultCode === "00") {
+                const items = data.response.body.items.item;
+                
+                const temp = items.find(i => i.category === "T1H").obsrValue;
+                const humi = items.find(i => i.category === "REH").obsrValue;
+                const rain = items.find(i => i.category === "RN1").obsrValue;
+
+                document.getElementById('temp-val').innerText = `${temp}°`;
+                document.getElementById('humi-val').innerText = `${humi}%`;
+                document.getElementById('rain-val').innerText = `${rain}mm`;
+                document.getElementById('base-time').innerText = `${year}.${month}.${day} ${hours}:00 기준`;
+            } else {
+                console.error("API 응답 오류:", data.response.header.resultMsg);
+                alert("현재 데이터를 불러올 수 없는 시간대이거나 점검 중입니다.");
+            }
+        } catch (error) {
+            console.error("Fetch 에러:", error);
+            alert("네트워크 오류가 발생했습니다.");
+        } finally {
+            widget.classList.remove('loading');
+        }
+    }
+
+    // 초기 실행
+    fetchWeather();
+</script>
+
+</body>
+</html>
